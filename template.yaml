@@ -1,14 +1,200 @@
-import json
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: LoanLens backend MVP (deterministic, PRD-bounded)
 
-from app.main import process_loan_document
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.12
+    MemorySize: 512
+    Environment:
+      Variables:
+        APP_ENV: production
+        AWS_REGION: !Ref AWS::Region
+        S3_INPUT_BUCKET: !Ref LoanLensUploadBucket
+        DYNAMODB_RULES_TABLE: !Ref LoanLensRulesTable
+        DYNAMODB_DLA_TABLE: !Ref LoanLensDlaSnapshotTable
+        DYNAMODB_LOGS_TABLE: !Ref LoanLensInteractionLogsTable
+        USE_FAKE_TEXTRACT: 'false'
 
+Resources:
+  LoanLensApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
 
-def lambda_handler(event, context):
-    body = event.get("body") or "{}"
-    payload = json.loads(body) if isinstance(body, str) else body
-    result = process_loan_document(payload)
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(result.model_dump(mode="json")),
-    }
+  LoanLensUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireUploadsAfter7Days
+            Status: Enabled
+            ExpirationInDays: 7
+
+  LoanLensRulesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: rule_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: rule_id
+          KeyType: HASH
+
+  LoanLensDlaSnapshotTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: snapshot_date
+          AttributeType: S
+        - AttributeName: canonical_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: snapshot_date
+          KeyType: HASH
+        - AttributeName: canonical_name
+          KeyType: RANGE
+
+  LoanLensInteractionLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: interaction_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: interaction_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
+  LoanLensHealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions.health_handler.lambda_handler
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: get
+            RestApiId: !Ref LoanLensApi
+
+  LoanLensMockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions.loanlens_mock_handler.lambda_handler
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /loanlens/mock
+            Method: get
+            RestApiId: !Ref LoanLensApi
+
+  LoanLensProcessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions.loanlens_process_handler.lambda_handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt LoanLensRulesTable.Arn
+                - !GetAtt LoanLensDlaSnapshotTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt LoanLensInteractionLogsTable.Arn
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: !Ref LoanLensEscalationStateMachine
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /loanlens/process
+            Method: post
+            RestApiId: !Ref LoanLensApi
+
+  LoanLensExtractionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions.extraction_handler.lambda_handler
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref LoanLensUploadBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:StartDocumentTextDetection
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt LoanLensInteractionLogsTable.Arn
+      Events:
+        UploadEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref LoanLensUploadBucket
+            Events: s3:ObjectCreated:*
+
+  LoanLensEscalationStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Definition:
+        StartAt: RouteDraft
+        States:
+          RouteDraft:
+            Type: Choice
+            Choices:
+              - Variable: $.draft_type
+                StringEquals: grievance_officer
+                Next: GrievanceDraft
+            Default: SachetDraft
+          GrievanceDraft:
+            Type: Pass
+            End: true
+          SachetDraft:
+            Type: Pass
+            End: true
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource:
+                - !GetAtt LoanLensProcessFunction.Arn
+
+Outputs:
+  LoanLensApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${LoanLensApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+  UploadBucketName:
+    Value: !Ref LoanLensUploadBucket

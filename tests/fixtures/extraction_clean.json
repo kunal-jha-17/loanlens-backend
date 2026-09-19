@@ -1,0 +1,82 @@
+{
+  "extraction": {
+    "lender_name": "Apex Capital Finance",
+    "sanctioned_amount": 100000,
+    "net_disbursal": 96000,
+    "fees": [
+      {
+        "name": "processing_fee",
+        "amount": 3000
+      },
+      {
+        "name": "documentation_fee",
+        "amount": 1000
+      }
+    ],
+    "tenure": 12,
+    "repayment_schedule": [
+      {
+        "month": 1,
+        "amount": 9000
+      },
+      {
+        "month": 2,
+        "amount": 9000
+      },
+      {
+        "month": 3,
+        "amount": 9000
+      },
+      {
+        "month": 4,
+        "amount": 9000
+      },
+      {
+        "month": 5,
+        "amount": 9000
+      },
+      {
+        "month": 6,
+        "amount": 9000
+      },
+      {
+        "month": 7,
+        "amount": 9000
+      },
+      {
+        "month": 8,
+        "amount": 9000
+      },
+      {
+        "month": 9,
+        "amount": 9000
+      },
+      {
+        "month": 10,
+        "amount": 9000
+      },
+      {
+        "month": 11,
+        "amount": 9000
+      },
+      {
+        "month": 12,
+        "amount": 9000
+      }
+    ],
+    "nominal_rate": 0.2,
+    "stated_apr": 0.22,
+    "cooling_off_text": "You may exit during cooling-off by repaying principal and proportionate charges.",
+    "grievance_text": "Grievance officer: grievance@apex-demo.example",
+    "permissions_text": "No sensitive phone permissions requested for this service.",
+    "repayment_account_text": "Repayment to lender escrow account AXIS00012345",
+    "ocr_confidence": 0.95,
+    "field_confidence": {
+      "lender_name": 0.98,
+      "sanctioned_amount": 0.99,
+      "net_disbursal": 0.98,
+      "tenure": 0.97,
+      "repayment_schedule": 0.96
+    }
+  }
+}

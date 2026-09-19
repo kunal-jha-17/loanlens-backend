@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import json
 
-from app.mock_data import build_mock_response
-
 
 def lambda_handler(event, context):
-    response = build_mock_response().model_dump(mode="json")
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(response),
+        "body": json.dumps({"status": "ok", "service": "loanlens-backend"}),
     }
