@@ -26,11 +26,11 @@ Resources:
         AllowHeaders: '"Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"'
         AllowOrigin: '"*"'
 
-  PlaceholderFunction:
+  LoanLensMockFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/
-      Handler: placeholder_lambda.lambda_handler
+      CodeUri: .
+      Handler: functions.loanlens_mock_handler.lambda_handler
       Events:
         ApiEvent:
           Type: Api
@@ -39,11 +39,11 @@ Resources:
             Method: get
             RestApiId: !Ref LoanLensApi
 
-  ExtractionFunction:
+  LoanLensProcessFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/
-      Handler: placeholder_lambda.lambda_handler
+      CodeUri: .
+      Handler: functions.loanlens_process_handler.lambda_handler
       Events:
         ApiEvent:
           Type: Api
@@ -52,29 +52,29 @@ Resources:
             Method: post
             RestApiId: !Ref LoanLensApi
 
-  RulesFunction:
+  LoanLensRulesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/
-      Handler: placeholder_lambda.lambda_handler
+      CodeUri: .
+      Handler: functions.loanlens_mock_handler.lambda_handler
 
-  FinanceFunction:
+  LoanLensFinanceFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/
-      Handler: placeholder_lambda.lambda_handler
+      CodeUri: .
+      Handler: functions.loanlens_mock_handler.lambda_handler
 
-  DlaLookupFunction:
+  LoanLensDlaLookupFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/
-      Handler: placeholder_lambda.lambda_handler
+      CodeUri: .
+      Handler: functions.loanlens_mock_handler.lambda_handler
 
-  OrchestratorFunction:
+  LoanLensOrchestratorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/
-      Handler: placeholder_lambda.lambda_handler
+      CodeUri: .
+      Handler: functions.loanlens_mock_handler.lambda_handler
 
 Outputs:
   LoanLensApiUrl:

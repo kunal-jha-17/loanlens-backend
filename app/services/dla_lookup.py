@@ -2,50 +2,85 @@ from __future__ import annotations
 
 from app.models import ComplianceRule
 
-
 RULE_LIBRARY = {
     "KFS-01": {
-        "label": "missing KFS/cost fields",
         "result_text": "Key loan terms such as sanctioned amount, net disbursal, fees, or repayment schedule are missing.",
     },
     "COST-01": {
-        "label": "net disbursal below sanctioned amount",
         "result_text": "The lender has deducted fees or other amounts such that net disbursal is lower than the sanctioned amount.",
     },
     "FEE-01": {
-        "label": "undisclosed platform/LSP fee",
         "result_text": "An undisclosed platform or LSP fee may be present and should be verified with the lender.",
     },
     "FLOW-01": {
-        "label": "unclear repayment account",
         "result_text": "Repayment appears to be routed to an unclear, personal, or non-business account.",
     },
     "DATA-01": {
-        "label": "contacts/call-log/telephony permission requests",
         "result_text": "The document requests contacts, call-log, or telephony permissions that should be reviewed.",
     },
     "GRV-01": {
-        "label": "no grievance contact shown",
         "result_text": "No grievance contact or escalation channel is shown in the visible terms.",
     },
     "COOL-01": {
-        "label": "no cooling-off wording",
         "result_text": "Cooling-off wording is missing or not clearly disclosed.",
     },
     "DLA-01": {
-        "label": "no match in DLA snapshot",
         "result_text": "No match was found in the DLA snapshot for the lender or app name.",
     },
 }
 
 
+def compute_cash_flow_cost(
+    net_disbursal: float,
+    fees: list[dict],
+    repayment_schedule: list[dict],
+    tenure_months: int,
+) -> tuple[float, float, list[dict]]:
+    """Compute total repayment and annualised cost from deterministic cash-flow data."""
+    fee_total = sum(float(item.get("amount", 0.0)) for item in fees)
+    schedule: list[dict] = []
+    total_repayment = 0.0
+
+    for index, item in enumerate(repayment_schedule, start=1):
+        amount = float(item.get("amount", 0.0))
+        total_repayment += amount
+        schedule.append({
+            "month": int(item.get("month", index)),
+            "amount": round(amount, 2),
+        })
+
+    if total_repayment <= 0:
+        total_repayment = float(net_disbursal) + fee_total
+
+    cashflows = [-float(net_disbursal)]
+    for item in repayment_schedule:
+        cashflows.append(float(item.get("amount", 0.0)))
+
+    rate = 0.05
+    for _ in range(2000):
+        npv = sum(cf / ((1 + rate) ** i) for i, cf in enumerate(cashflows))
+        dnpv = sum(-i * cf / ((1 + rate) ** (i + 1)) for i, cf in enumerate(cashflows))
+        if abs(dnpv) < 1e-12:
+            break
+        new_rate = rate - (npv / dnpv)
+        if new_rate <= -0.9999:
+            new_rate = -0.99
+        if abs(new_rate - rate) < 1e-12:
+            rate = new_rate
+            break
+        rate = new_rate
+
+    annualised_cost = ((1 + rate) ** 12) - 1 if rate > -1 else 0.0
+    return round(total_repayment, 2), round(annualised_cost, 6), schedule
+
+
 def evaluate_rules(extraction: dict) -> list[ComplianceRule]:
-    """Evaluate rules against an extracted payload. Return deterministic statuses with evidence."""
+    """Evaluate the eight seeded rule IDs against the extracted payload."""
     results: list[ComplianceRule] = []
 
-    fees = extraction.get("fees", [])
     sanctioned = float(extraction.get("sanctioned_amount", 0.0) or 0.0)
     net_disbursal = float(extraction.get("net_disbursal", 0.0) or 0.0)
+    fees = extraction.get("fees", [])
     permissions_text = (extraction.get("permissions_text") or "").lower()
     grievance_text = (extraction.get("grievance_text") or "").lower()
     cooling_off_text = (extraction.get("cooling_off_text") or "").lower()
@@ -64,7 +99,7 @@ def evaluate_rules(extraction: dict) -> list[ComplianceRule]:
             ComplianceRule(
                 rule_id="KFS-01",
                 status="Pass",
-                evidence_text="Processed fields include sanctioned amount, net disbursal, fees, and repayment schedule.",
+                evidence_text="Sanctioned amount, net disbursal, fees, and repayment schedule are visible.",
                 reason_text="All key KFS fields are present.",
             )
         )
@@ -74,7 +109,7 @@ def evaluate_rules(extraction: dict) -> list[ComplianceRule]:
             ComplianceRule(
                 rule_id="COST-01",
                 status="Pass",
-                evidence_text=f"Net disbursal {net_disbursal} is below sanctioned amount {sanctioned}.",
+                evidence_text=f"Net disbursal {net_disbursal} is lower than sanctioned amount {sanctioned}.",
                 reason_text=RULE_LIBRARY["COST-01"]["result_text"],
             )
         )
@@ -116,7 +151,7 @@ def evaluate_rules(extraction: dict) -> list[ComplianceRule]:
             ComplianceRule(
                 rule_id="FLOW-01",
                 status="Potential concern",
-                evidence_text="Permissions or payment details imply an unclear account or personal account flow.",
+                evidence_text="Permissions or payment details imply an unclear or personal account flow.",
                 reason_text=RULE_LIBRARY["FLOW-01"]["result_text"],
             )
         )
@@ -187,7 +222,6 @@ def evaluate_rules(extraction: dict) -> list[ComplianceRule]:
             )
         )
 
-    # DLA check is intentionally decoupled from the rules engine, but this rule exists for the contract.
     results.append(
         ComplianceRule(
             rule_id="DLA-01",

@@ -1,12 +1,14 @@
 import json
 
-from app.mock_data import build_mock_response
+from app.main import process_loan_document
 
 
 def lambda_handler(event, context):
-    response = build_mock_response().model_dump()
+    body = event.get("body") or "{}"
+    payload = json.loads(body) if isinstance(body, str) else body
+    result = process_loan_document(payload)
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(response),
+        "body": json.dumps(result.model_dump(mode="json")),
     }
