@@ -1,0 +1,16 @@
+{
+  "snapshot_date": "2026-09-01",
+  "source": "synthetic_redacted_demo",
+  "entries": [
+    {
+      "canonical_name": "Apex Capital Finance Limited",
+      "aliases": ["Apex Capital Finance", "Apex Finance", "Apex CF"],
+      "listed_association": true
+    },
+    {
+      "canonical_name": "StarFin Credit Technologies",
+      "aliases": ["StarFin Credit", "StarFin"],
+      "listed_association": false
+    }
+  ]
+}

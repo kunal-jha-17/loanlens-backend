@@ -1,0 +1,10 @@
+[
+  {"rule_id": "KFS-01", "title": "Key Fact Statement visibility"},
+  {"rule_id": "COST-01", "title": "Stated APR vs computed cost"},
+  {"rule_id": "FEE-01", "title": "Undisclosed or opaque fee checks"},
+  {"rule_id": "FLOW-01", "title": "Repayment flow destination clarity"},
+  {"rule_id": "DATA-01", "title": "Sensitive permissions disclosures"},
+  {"rule_id": "GRV-01", "title": "Grievance contact availability"},
+  {"rule_id": "COOL-01", "title": "Cooling-off statement availability"},
+  {"rule_id": "DLA-01", "title": "DLA snapshot association check"}
+]
