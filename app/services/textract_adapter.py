@@ -5,6 +5,7 @@ from pathlib import Path
 
 import boto3
 
+from app.config import SETTINGS
 from app.models import Extraction
 
 
@@ -29,7 +30,7 @@ class AwsTextractAdapter(TextractAdapter):
     """Thin boundary that calls Textract asynchronously. Parsing remains deterministic."""
 
     def __init__(self) -> None:
-        self.client = boto3.client("textract")
+        self.client = boto3.client("textract", region_name=SETTINGS.aws_region)
 
     def extract(self, bucket: str, key: str) -> Extraction:
         # Start async job and return a bounded placeholder extraction; downstream marks for verification.

@@ -10,7 +10,7 @@ Globals:
     Environment:
       Variables:
         APP_ENV: production
-        AWS_REGION: !Ref AWS::Region
+        LOANLENS_AWS_REGION: ap-south-1
         S3_INPUT_BUCKET: !Ref LoanLensUploadBucket
         DYNAMODB_RULES_TABLE: !Ref LoanLensRulesTable
         DYNAMODB_DLA_TABLE: !Ref LoanLensDlaSnapshotTable
@@ -116,23 +116,6 @@ Resources:
     Properties:
       CodeUri: .
       Handler: functions.loanlens_process_handler.lambda_handler
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:GetItem
-                - dynamodb:Query
-              Resource:
-                - !GetAtt LoanLensRulesTable.Arn
-                - !GetAtt LoanLensDlaSnapshotTable.Arn
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem
-              Resource: !GetAtt LoanLensInteractionLogsTable.Arn
-            - Effect: Allow
-              Action:
-                - states:StartExecution
-              Resource: !Ref LoanLensEscalationStateMachine
       Events:
         ApiEvent:
           Type: Api
@@ -147,17 +130,11 @@ Resources:
       CodeUri: .
       Handler: functions.extraction_handler.lambda_handler
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref LoanLensUploadBucket
         - Statement:
             - Effect: Allow
               Action:
                 - textract:StartDocumentTextDetection
               Resource: '*'
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem
-              Resource: !GetAtt LoanLensInteractionLogsTable.Arn
       Events:
         UploadEvent:
           Type: S3
@@ -184,17 +161,10 @@ Resources:
           SachetDraft:
             Type: Pass
             End: true
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - lambda:InvokeFunction
-              Resource:
-                - !GetAtt LoanLensProcessFunction.Arn
 
 Outputs:
   LoanLensApiUrl:
     Description: API Gateway endpoint URL
-    Value: !Sub "https://${LoanLensApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+    Value: !Sub "https://${LoanLensApi}.execute-api.ap-south-1.amazonaws.com/prod/"
   UploadBucketName:
     Value: !Ref LoanLensUploadBucket
