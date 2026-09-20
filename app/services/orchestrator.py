@@ -6,8 +6,9 @@ from app.constants import CRITICAL_CONFIDENCE_THRESHOLD, CRITICAL_FIELDS, GLOBAL
 from app.models import ActionReceipt, CostReceipt, Extraction, LoanLensResponse
 from app.services.cost_engine import compute_cash_flow_cost
 from app.services.dla_lookup import DlaSnapshotLookup
-from app.services.escalation import build_escalation_draft
+from app.services.interaction_logger import write_interaction_log
 from app.services.rules_engine import evaluate_rules
+from app.services.stepfunctions import maybe_start_escalation
 
 
 class CriticalFieldError(ValueError):
@@ -52,7 +53,6 @@ def process_extraction(extraction: Extraction) -> LoanLensResponse:
     dla_lookup = DlaSnapshotLookup()
     dla_status = dla_lookup.lookup(extraction.lender_name)
     rules = evaluate_rules(extraction, dla_status, cost.estimated_annualised_cost, warnings)
-    draft_type, complaint_draft = build_escalation_draft(extraction, rules, dla_status)
 
     if any(rule.status in {"Missing", "Needs verification"} for rule in rules):
         warnings.append("One or more checks need verification based on missing or low-confidence fields.")
@@ -77,8 +77,8 @@ def process_extraction(extraction: Extraction) -> LoanLensResponse:
             "Review all flagged items and verify with the lender using the original KFS/loan document.",
             "Preserve screenshots, KFS copy, and repayment proof before any complaint draft is sent.",
         ],
-        complaint_draft=complaint_draft,
-        draft_type=draft_type,
+        complaint_draft=None,
+        draft_type=None,
         evidence_pack={
             "generated_at": datetime.now(UTC).isoformat(),
             "rule_ids": [rule.rule_id for rule in rules],
@@ -87,7 +87,7 @@ def process_extraction(extraction: Extraction) -> LoanLensResponse:
         },
     )
 
-    return LoanLensResponse(
+    response = LoanLensResponse(
         extraction=extraction,
         cost_receipt=cost_receipt,
         compliance_receipt=rules,
@@ -95,3 +95,26 @@ def process_extraction(extraction: Extraction) -> LoanLensResponse:
         global_disclaimer=GLOBAL_DISCLAIMER,
         processing_warnings=warnings,
     )
+
+    # Real Step Functions call — synchronous Express execution, so the draft
+    # (if any) comes back in this same response instead of async.
+    complaint_draft, draft_type, escalation_arn = maybe_start_escalation(
+        extraction=extraction, rules=rules, dla_status=dla_status, response=response
+    )
+    if complaint_draft:
+        response.action_receipt.complaint_draft = complaint_draft
+        response.action_receipt.draft_type = draft_type
+    if escalation_arn:
+        response.action_receipt.evidence_pack["escalation_execution_arn"] = escalation_arn
+        response.processing_warnings.append(
+            "Escalation draft was generated via the Step Functions workflow; no message was sent."
+        )
+
+    interaction_id = write_interaction_log(
+        request_payload={"extraction": extraction.model_dump(mode="json")},
+        response_payload=response.model_dump(mode="json"),
+        status="processed",
+    )
+    response.action_receipt.evidence_pack["interaction_id"] = interaction_id
+
+    return response
