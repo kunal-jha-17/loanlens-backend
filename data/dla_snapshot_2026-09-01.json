@@ -3,14 +3,9 @@
   "source": "synthetic_redacted_demo",
   "entries": [
     {
-      "canonical_name": "Apex Capital Finance Limited",
-      "aliases": ["Apex Capital Finance", "Apex Finance", "Apex CF"],
+      "canonical_name": "TrustLend Finserv",
+      "aliases": ["TrustLend", "Trust Lend", "Trust Lend Finserv"],
       "listed_association": true
-    },
-    {
-      "canonical_name": "StarFin Credit Technologies",
-      "aliases": ["StarFin Credit", "StarFin"],
-      "listed_association": false
     }
   ]
 }
