@@ -116,6 +116,27 @@ Resources:
     Properties:
       CodeUri: .
       Handler: functions.loanlens_process_handler.lambda_handler
+      # Scoped here (not in Globals) on purpose — putting this in Globals
+      # would make every function, including the escalation-draft Lambda,
+      # reference the state machine, which references the escalation-draft
+      # Lambda back → circular dependency, sam deploy fails.
+      Environment:
+        Variables:
+          ESCALATION_STATE_MACHINE_ARN: !Ref LoanLensEscalationStateMachine
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt LoanLensDlaSnapshotTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt LoanLensInteractionLogsTable.Arn
+            - Effect: Allow
+              Action:
+                - states:StartSyncExecution
+              Resource: !Ref LoanLensEscalationStateMachine
       Events:
         ApiEvent:
           Type: Api
@@ -142,9 +163,16 @@ Resources:
             Bucket: !Ref LoanLensUploadBucket
             Events: s3:ObjectCreated:*
 
+  LoanLensEscalationDraftFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions.escalation_draft_handler.lambda_handler
+
   LoanLensEscalationStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
+      Type: EXPRESS
       Definition:
         StartAt: RouteDraft
         States:
@@ -156,11 +184,24 @@ Resources:
                 Next: GrievanceDraft
             Default: SachetDraft
           GrievanceDraft:
-            Type: Pass
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName: !GetAtt LoanLensEscalationDraftFunction.Arn
+              Payload.$: $
+            OutputPath: $.Payload
             End: true
           SachetDraft:
-            Type: Pass
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName: !GetAtt LoanLensEscalationDraftFunction.Arn
+              Payload.$: $
+            OutputPath: $.Payload
             End: true
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref LoanLensEscalationDraftFunction
 
 Outputs:
   LoanLensApiUrl:
